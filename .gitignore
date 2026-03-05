@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+
+# Expo
+.expo/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android build
+android/build/
+android/.gradle/
+
+# iOS build
+ios/Pods/
+ios/build/
+
+# Lock files
+package-lock.json
+yarn.lock
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+
+# Android build & cache
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+*.hprof
