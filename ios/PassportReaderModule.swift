@@ -112,15 +112,16 @@ public class PassportReaderModule: Module {
         // DG7 - Signature image as base64 JPEG
         var signatureImageBase64: String? = nil
         if let dg7 = passport.dataGroupsRead[.DG7] as? DataGroup7 {
-            if let imageData = dg7.imageData.first {
+            let imageRawData = Data(dg7.imageData)
+            if imageRawData.count > 0 {
                 // Try to create UIImage from the raw data
-                if let sigImage = UIImage(data: imageData) {
+                if let sigImage = UIImage(data: imageRawData) {
                     if let jpegData = sigImage.jpegData(compressionQuality: 0.9) {
                         signatureImageBase64 = jpegData.base64EncodedString()
                     }
                 } else {
                     // Fallback: return raw data as base64
-                    signatureImageBase64 = imageData.base64EncodedString()
+                    signatureImageBase64 = imageRawData.base64EncodedString()
                 }
             }
         }
@@ -128,7 +129,6 @@ public class PassportReaderModule: Module {
         // DG11 - Additional personal details
         var placeOfBirth: String? = nil
         var fullName: String? = nil
-        var otherNames: [String]? = nil
         var personalNumber: String? = nil
         var telephone: String? = nil
         var profession: String? = nil
@@ -138,7 +138,6 @@ public class PassportReaderModule: Module {
 
         if let dg11 = passport.dataGroupsRead[.DG11] as? DataGroup11 {
             fullName = dg11.fullName
-            otherNames = dg11.otherNames
             personalNumber = dg11.personalNumber
             placeOfBirth = dg11.placeOfBirth
             telephone = dg11.telephone
@@ -181,7 +180,6 @@ public class PassportReaderModule: Module {
         if let v = signatureImageBase64 { result["signatureImageBase64"] = v }
         if let v = placeOfBirth { result["placeOfBirth"] = v }
         if let v = fullName { result["fullName"] = v }
-        if let v = otherNames, !v.isEmpty { result["otherNames"] = v }
         if let v = personalNumber, !v.isEmpty { result["personalNumber"] = v }
         if let v = telephone, !v.isEmpty { result["telephone"] = v }
         if let v = profession, !v.isEmpty { result["profession"] = v }
