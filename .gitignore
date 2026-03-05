@@ -36,9 +36,6 @@ yarn.lock
 # typescript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-
 # Android build & cache
 android/.gradle/
 android/.kotlin/
