@@ -78,6 +78,7 @@ function withNFCEntitlement(config, options = {}) {
     // iOS: Copy PEM to Xcode project and add to bundle resources
     config = withXcodeProject(config, (config) => {
       const projectRoot = config.modRequest.projectRoot;
+      const projectName = config.modRequest.projectName;
       const pemSource = path.resolve(projectRoot, masterListPem);
 
       if (!fs.existsSync(pemSource)) {
@@ -86,11 +87,7 @@ function withNFCEntitlement(config, options = {}) {
         );
       }
 
-      const iosProjectDir = path.join(
-        projectRoot,
-        "ios",
-        config.modRequest.projectName
-      );
+      const iosProjectDir = path.join(projectRoot, "ios", projectName);
 
       if (!fs.existsSync(iosProjectDir)) {
         fs.mkdirSync(iosProjectDir, { recursive: true });
@@ -100,17 +97,13 @@ function withNFCEntitlement(config, options = {}) {
       fs.copyFileSync(pemSource, pemDest);
 
       const xcodeProject = config.modResults;
-      const projectName = config.modRequest.projectName;
 
-      // Check if file is already in the project
-      const existingFile = xcodeProject.getFirstTarget();
-      const groupKey =
-        xcodeProject.findPBXGroupKey({ name: projectName }) ||
-        xcodeProject.findPBXGroupKey({ path: projectName });
-
-      if (groupKey) {
-        // Add the PEM file as a resource
-        xcodeProject.addResourceFile("bundle.pem", { target: existingFile.uuid }, groupKey);
+      // Add resource file using project-relative path (avoids group path resolution issues)
+      const resourcePath = `${projectName}/bundle.pem`;
+      if (!xcodeProject.hasFile(resourcePath)) {
+        xcodeProject.addResourceFile(resourcePath, {
+          lastKnownFileType: "text",
+        });
       }
 
       return config;
