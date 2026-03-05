@@ -46,6 +46,8 @@ class PassportReaderModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("PassportReader")
 
+        Events("onPassportReadProgress")
+
         AsyncFunction("readPassport") { serialNumber: String, dateOfBirth: String, dateOfExpiry: String, promise: Promise ->
             val activity = appContext.activityProvider?.currentActivity
             if (activity == null) {
@@ -153,16 +155,33 @@ class PassportReaderModule : Module() {
         passportService.sendSelectApplet(false)
         passportService.doBAC(bacKey)
 
+        // Total steps for progress: DG1, SOD, DG2, DG7, DG11, DG12, PassiveAuth, ActiveAuth = 8
+        val totalSteps = 8
+        var currentStep = 0
+
+        fun emitProgress(step: Int, message: String) {
+            currentStep = step
+            val progress = (step.toDouble() / totalSteps * 100).toInt()
+            sendEvent("onPassportReadProgress", mapOf(
+                "progress" to progress,
+                "step" to step,
+                "totalSteps" to totalSteps,
+                "message" to message
+            ))
+        }
+
         // Collect raw bytes for passive authentication hash verification
         val dgRawBytes = mutableMapOf<Int, ByteArray>()
 
         // Read DG1 (MRZ data)
+        emitProgress(1, "Reading MRZ data...")
         val dg1Bytes = readAllBytes(passportService.getInputStream(PassportService.EF_DG1))
         dgRawBytes[1] = dg1Bytes
         val dg1 = DG1File(ByteArrayInputStream(dg1Bytes))
         val mrzInfo = dg1.mrzInfo
 
         // Read SOD (Security Object Document) for passive authentication
+        emitProgress(2, "Reading security data...")
         var sodFile: SODFile? = null
         try {
             val sodIn = passportService.getInputStream(PassportService.EF_SOD)
@@ -170,6 +189,7 @@ class PassportReaderModule : Module() {
         } catch (_: Exception) {}
 
         // Read DG2 (facial image) - extract as base64
+        emitProgress(3, "Reading face photo...")
         var faceImageBase64: String? = null
         try {
             val dg2Bytes = readAllBytes(passportService.getInputStream(PassportService.EF_DG2))
@@ -189,6 +209,7 @@ class PassportReaderModule : Module() {
         } catch (_: Exception) {}
 
         // Read DG7 (signature image)
+        emitProgress(4, "Reading signature image...")
         var signatureImageBase64: String? = null
         try {
             val dg7Bytes = readAllBytes(passportService.getInputStream(PassportService.EF_DG7))
@@ -205,6 +226,7 @@ class PassportReaderModule : Module() {
         } catch (_: Exception) {}
 
         // Read DG11 (additional personal info)
+        emitProgress(5, "Reading personal details...")
         var placeOfBirth: String? = null
         var fullName: String? = null
         var otherNames: List<String>? = null
@@ -230,6 +252,7 @@ class PassportReaderModule : Module() {
         } catch (_: Exception) {}
 
         // Read DG12 (additional document details)
+        emitProgress(6, "Reading document details...")
         var issuingAuthority: String? = null
         var dateOfIssue: String? = null
         var endorsements: String? = null
@@ -245,9 +268,11 @@ class PassportReaderModule : Module() {
         } catch (_: Exception) {}
 
         // Passive Authentication: verify data group hashes against SOD
+        emitProgress(7, "Verifying passport authenticity...")
         val passiveAuthPassed = performPassiveAuth(sodFile, dgRawBytes)
 
         // Active Authentication: challenge-response with DG15 public key
+        emitProgress(8, "Performing active authentication...")
         val activeAuthPassed = performActiveAuth(passportService)
 
         val readGroups = mutableListOf("1")

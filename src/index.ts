@@ -1,4 +1,16 @@
-import { requireNativeModule } from "expo-modules-core";
+import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import type { NativeModule } from "expo-modules-core/build/ts-declarations/NativeModule";
+
+export interface PassportReadProgress {
+  /** Overall progress percentage (0-100) */
+  progress: number;
+  /** Current step index */
+  step: number;
+  /** Total number of steps */
+  totalSteps: number;
+  /** Human-readable status message */
+  message: string;
+}
 
 export interface PassportData {
   firstName: string;
@@ -45,6 +57,10 @@ export interface PassportData {
   taxOrExitRequirements?: string;
 }
 
+type PassportReaderEvents = {
+  onPassportReadProgress: (event: PassportReadProgress) => void;
+};
+
 interface PassportReaderNative {
   readPassport(
     serialNumber: string,
@@ -56,6 +72,27 @@ interface PassportReaderNative {
 
 const PassportReaderModule =
   requireNativeModule<PassportReaderNative>("PassportReader");
+
+const passportReaderEmitter =
+  PassportReaderModule as unknown as NativeModule<PassportReaderEvents>;
+
+/**
+ * Subscribe to passport read progress events.
+ * Fires on both iOS and Android with progress percentage and status messages.
+ *
+ * @example
+ * ```ts
+ * const subscription = addPassportReadProgressListener((event) => {
+ *   console.log(`${event.progress}% - ${event.message}`);
+ * });
+ * // Later: subscription.remove();
+ * ```
+ */
+export function addPassportReadProgressListener(
+  listener: (event: PassportReadProgress) => void,
+): EventSubscription {
+  return passportReaderEmitter.addListener("onPassportReadProgress", listener);
+}
 
 /**
  * Read passport data via NFC.

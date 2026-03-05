@@ -9,6 +9,8 @@ public class PassportReaderModule: Module {
     public func definition() -> ModuleDefinition {
         Name("PassportReader")
 
+        Events("onPassportReadProgress")
+
         AsyncFunction("readPassport") { (serialNumber: String, dateOfBirth: String, dateOfExpiry: String, promise: Promise) in
             Task { @MainActor in
                 await self.performRead(
@@ -53,17 +55,48 @@ public class PassportReaderModule: Module {
             passportReader.setMasterListURL(masterListURL)
         }
 
-        let customMessageHandler: (NFCViewDisplayMessage) -> String? = { message in
+        let customMessageHandler: (NFCViewDisplayMessage) -> String? = { [weak self] message in
             switch message {
             case .requestPresentPassport:
+                self?.sendEvent("onPassportReadProgress", [
+                    "progress": 0,
+                    "step": 0,
+                    "totalSteps": 8,
+                    "message": "Hold your NFC-enabled ID near the phone."
+                ])
                 return "Hold your NFC-enabled ID near the phone."
             case .readingDataGroupProgress(let id, let progress):
-                return "Reading data group \(id)... \(Int(progress * 100))%"
+                let progressInt = Int(progress * 100)
+                self?.sendEvent("onPassportReadProgress", [
+                    "progress": progressInt,
+                    "step": Int(id.rawValue),
+                    "totalSteps": 8,
+                    "message": "Reading data group \(id)... \(progressInt)%"
+                ])
+                return "Reading data group \(id)... \(progressInt)%"
             case .activeAuthentication:
+                self?.sendEvent("onPassportReadProgress", [
+                    "progress": 90,
+                    "step": 7,
+                    "totalSteps": 8,
+                    "message": "Authenticating identity..."
+                ])
                 return "Authenticating identity..."
             case .authenticatingWithPassport:
+                self?.sendEvent("onPassportReadProgress", [
+                    "progress": 80,
+                    "step": 6,
+                    "totalSteps": 8,
+                    "message": "Performing authentication..."
+                ])
                 return "Performing authentication..."
             case .successfulRead:
+                self?.sendEvent("onPassportReadProgress", [
+                    "progress": 100,
+                    "step": 8,
+                    "totalSteps": 8,
+                    "message": "Read successful"
+                ])
                 return "Read successful"
             default:
                 return nil
