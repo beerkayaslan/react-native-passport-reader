@@ -93,17 +93,78 @@ function withNFCEntitlement(config, options = {}) {
         fs.mkdirSync(iosProjectDir, { recursive: true });
       }
 
-      const pemDest = path.join(iosProjectDir, "bundle.pem");
-      fs.copyFileSync(pemSource, pemDest);
+      fs.copyFileSync(pemSource, path.join(iosProjectDir, "bundle.pem"));
 
+      // Manually add to Xcode project to avoid xcode library's
+      // addResourceFile crash when no "Resources" group exists
       const xcodeProject = config.modResults;
+      const objects = xcodeProject.hash.project.objects;
+      const fileName = "bundle.pem";
 
-      // Add resource file using project-relative path (avoids group path resolution issues)
-      const resourcePath = `${projectName}/bundle.pem`;
-      if (!xcodeProject.hasFile(resourcePath)) {
-        xcodeProject.addResourceFile(resourcePath, {
-          lastKnownFileType: "text",
-        });
+      // Check if already added
+      const fileRefs = objects["PBXFileReference"] || {};
+      const alreadyAdded = Object.keys(fileRefs).some(
+        (key) =>
+          !key.endsWith("_comment") &&
+          (fileRefs[key].path === fileName ||
+            fileRefs[key].path === `"${fileName}"`)
+      );
+      if (alreadyAdded) return config;
+
+      // 1. Create PBXFileReference
+      const fileRefUuid = xcodeProject.generateUuid();
+      objects["PBXFileReference"][fileRefUuid] = {
+        isa: "PBXFileReference",
+        lastKnownFileType: "text",
+        path: fileName,
+        sourceTree: '"<group>"',
+      };
+      objects["PBXFileReference"][`${fileRefUuid}_comment`] = fileName;
+
+      // 2. Add to the app's PBXGroup
+      const mainGroupKey =
+        xcodeProject.getFirstProject().firstProject.mainGroup;
+      const mainGroup = xcodeProject.getPBXGroupByKey(mainGroupKey);
+      let appGroupKey = mainGroupKey;
+      if (mainGroup && mainGroup.children) {
+        for (const child of mainGroup.children) {
+          if (child.comment === projectName) {
+            appGroupKey = child.value;
+            break;
+          }
+        }
+      }
+      const appGroup = xcodeProject.getPBXGroupByKey(appGroupKey);
+      if (appGroup && appGroup.children) {
+        appGroup.children.push({ value: fileRefUuid, comment: fileName });
+      }
+
+      // 3. Create PBXBuildFile
+      const buildFileUuid = xcodeProject.generateUuid();
+      objects["PBXBuildFile"][buildFileUuid] = {
+        isa: "PBXBuildFile",
+        fileRef: fileRefUuid,
+        fileRef_comment: fileName,
+      };
+      objects["PBXBuildFile"][`${buildFileUuid}_comment`] =
+        `${fileName} in Resources`;
+
+      // 4. Add to Copy Bundle Resources build phase
+      const target = xcodeProject.getFirstTarget();
+      const nativeTarget = objects["PBXNativeTarget"][target.uuid];
+      if (nativeTarget && nativeTarget.buildPhases) {
+        for (const phaseRef of nativeTarget.buildPhases) {
+          const phase =
+            objects["PBXResourcesBuildPhase"] &&
+            objects["PBXResourcesBuildPhase"][phaseRef.value];
+          if (phase && phase.files) {
+            phase.files.push({
+              value: buildFileUuid,
+              comment: `${fileName} in Resources`,
+            });
+            break;
+          }
+        }
       }
 
       return config;
