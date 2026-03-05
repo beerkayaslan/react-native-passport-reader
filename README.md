@@ -49,11 +49,29 @@ This automatically configures:
 - **iOS**: NFC Tag Reading entitlement, `NFCReaderUsageDescription`, ISO 7816 AID identifiers
 - **Android**: NFC permission and hardware feature declaration
 
-### iOS Additional Setup
+### Passive Authentication (CSCA Master List)
 
-For passive authentication (certificate verification), place a `bundle.pem` CSCA master list file in your app's bundle resources.
+For full passive authentication (verifying the passport's certificate chain against your country's CSCA certificates), you need to provide a PEM file containing the CSCA master list.
 
-### Bare Workflow
+1. Obtain the CSCA master list PEM file from [ICAO PKD](https://pkddownloadsg.icao.int/) or your country's authority
+2. Place the file in your project (e.g., `assets/bundle.pem`)
+3. Configure the plugin with the path:
+
+```json
+{
+  "expo": {
+    "plugins": [
+      ["rn-passport-reader", { "masterListPem": "./assets/bundle.pem" }]
+    ]
+  }
+}
+```
+
+The plugin will automatically copy the PEM file to both iOS and Android native projects during prebuild.
+
+> **Without the PEM file:** Passive authentication on Android will only verify data group hashes against the SOD (data integrity), but won't verify the certificate chain. On iOS, `passiveAuthentication` will return `false` if no master list is available.
+
+### iOS Additional Setup (Bare Workflow)
 
 If you're not using Expo managed workflow, you need to manually configure:
 

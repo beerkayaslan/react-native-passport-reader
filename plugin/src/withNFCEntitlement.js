@@ -2,13 +2,23 @@ const {
   withEntitlementsPlist,
   withInfoPlist,
   withAndroidManifest,
+  withXcodeProject,
+  withDangerousMod,
 } = require("expo/config-plugins");
+const fs = require("fs");
+const path = require("path");
 
 /**
  * Expo config plugin to configure NFC entitlements and permissions
  * for both iOS and Android platforms.
+ *
+ * Options:
+ * - masterListPem: Path to the CSCA master list PEM file (relative to project root)
+ *                  Required for passive authentication of passport NFC chips.
  */
-function withNFCEntitlement(config) {
+function withNFCEntitlement(config, options = {}) {
+  const masterListPem = options.masterListPem || null;
+
   // iOS: Add NFC Tag reading entitlement
   config = withEntitlementsPlist(config, (config) => {
     config.modResults["com.apple.developer.nfc.readersession.formats"] = [
@@ -62,6 +72,83 @@ function withNFCEntitlement(config) {
 
     return config;
   });
+
+  // Copy master list PEM file if provided
+  if (masterListPem) {
+    // iOS: Copy PEM to Xcode project and add to bundle resources
+    config = withXcodeProject(config, (config) => {
+      const projectRoot = config.modRequest.projectRoot;
+      const pemSource = path.resolve(projectRoot, masterListPem);
+
+      if (!fs.existsSync(pemSource)) {
+        throw new Error(
+          `[rn-passport-reader] Master list PEM file not found: ${pemSource}`
+        );
+      }
+
+      const iosProjectDir = path.join(
+        projectRoot,
+        "ios",
+        config.modRequest.projectName
+      );
+
+      if (!fs.existsSync(iosProjectDir)) {
+        fs.mkdirSync(iosProjectDir, { recursive: true });
+      }
+
+      const pemDest = path.join(iosProjectDir, "bundle.pem");
+      fs.copyFileSync(pemSource, pemDest);
+
+      const xcodeProject = config.modResults;
+      const projectName = config.modRequest.projectName;
+
+      // Check if file is already in the project
+      const existingFile = xcodeProject.getFirstTarget();
+      const groupKey =
+        xcodeProject.findPBXGroupKey({ name: projectName }) ||
+        xcodeProject.findPBXGroupKey({ path: projectName });
+
+      if (groupKey) {
+        // Add the PEM file as a resource
+        xcodeProject.addResourceFile("bundle.pem", { target: existingFile.uuid }, groupKey);
+      }
+
+      return config;
+    });
+
+    // Android: Copy PEM to assets directory
+    config = withDangerousMod(config, [
+      "android",
+      (config) => {
+        const projectRoot = config.modRequest.projectRoot;
+        const pemSource = path.resolve(projectRoot, masterListPem);
+
+        if (!fs.existsSync(pemSource)) {
+          throw new Error(
+            `[rn-passport-reader] Master list PEM file not found: ${pemSource}`
+          );
+        }
+
+        const assetsDir = path.join(
+          projectRoot,
+          "android",
+          "app",
+          "src",
+          "main",
+          "assets"
+        );
+
+        if (!fs.existsSync(assetsDir)) {
+          fs.mkdirSync(assetsDir, { recursive: true });
+        }
+
+        const pemDest = path.join(assetsDir, "bundle.pem");
+        fs.copyFileSync(pemSource, pemDest);
+
+        return config;
+      },
+    ]);
+  }
 
   return config;
 }

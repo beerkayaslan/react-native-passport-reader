@@ -26,6 +26,13 @@ import java.io.InputStream
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.Security
+import java.security.cert.CertificateFactory
+import java.security.cert.PKIXParameters
+import java.security.cert.TrustAnchor
+import java.security.cert.CertPathValidator
+import java.security.cert.CertStore
+import java.security.cert.CollectionCertStoreParameters
+import java.security.cert.X509Certificate
 import java.security.interfaces.ECPublicKey
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.jmrtd.lds.SODFile
@@ -287,6 +294,7 @@ class PassportReaderModule : Module() {
     private fun performPassiveAuth(sodFile: SODFile?, dgRawBytes: Map<Int, ByteArray>): Boolean {
         if (sodFile == null || dgRawBytes.isEmpty()) return false
         return try {
+            // Step 1: Verify DG hashes match SOD stored hashes
             val storedHashes = sodFile.dataGroupHashes
             val digestAlg = sodFile.digestAlgorithm
             val md = MessageDigest.getInstance(digestAlg)
@@ -299,10 +307,62 @@ class PassportReaderModule : Module() {
                     return false
                 }
             }
+
+            // Step 2: Verify SOD certificate chain against CSCA master list
+            val cscaCerts = loadCSCACertificates()
+            if (cscaCerts.isNotEmpty()) {
+                val docSigningCert = sodFile.docSigningCertificate ?: return false
+
+                // Build trust anchors from CSCA certificates
+                val trustAnchors = cscaCerts.map { TrustAnchor(it, null) }.toSet()
+                val params = PKIXParameters(trustAnchors)
+                params.isRevocationEnabled = false
+
+                // Build cert path
+                val certFactory = CertificateFactory.getInstance("X.509")
+                val certPath = certFactory.generateCertPath(listOf(docSigningCert))
+
+                // Validate certificate chain
+                val validator = CertPathValidator.getInstance("PKIX")
+                validator.validate(certPath, params)
+            }
+
             true
         } catch (e: Exception) {
             false
         }
+    }
+
+    private fun loadCSCACertificates(): List<X509Certificate> {
+        val certs = mutableListOf<X509Certificate>()
+        try {
+            val activity = appContext.activityProvider?.currentActivity ?: return certs
+            val assetManager = activity.assets
+            val inputStream = assetManager.open("bundle.pem")
+            val certFactory = CertificateFactory.getInstance("X.509")
+
+            val pemContent = inputStream.bufferedReader().readText()
+            inputStream.close()
+
+            // Parse all certificates from the PEM file
+            val certRegex = Regex(
+                "-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----",
+                RegexOption.DOT_MATCHES_ALL
+            )
+
+            for (match in certRegex.findAll(pemContent)) {
+                try {
+                    val certBase64 = match.groupValues[1]
+                        .replace("\\s".toRegex(), "")
+                    val certBytes = Base64.decode(certBase64, Base64.DEFAULT)
+                    val cert = certFactory.generateCertificate(
+                        ByteArrayInputStream(certBytes)
+                    ) as X509Certificate
+                    certs.add(cert)
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+        return certs
     }
 
     private fun performActiveAuth(passportService: PassportService): Boolean {
