@@ -100,43 +100,37 @@ function withNFCEntitlement(config, options = {}) {
       const xcodeProject = config.modResults;
       const objects = xcodeProject.hash.project.objects;
       const fileName = "bundle.pem";
+      const filePath = `${projectName}/bundle.pem`;
 
       // Check if already added
       const fileRefs = objects["PBXFileReference"] || {};
       const alreadyAdded = Object.keys(fileRefs).some(
         (key) =>
           !key.endsWith("_comment") &&
-          (fileRefs[key].path === fileName ||
-            fileRefs[key].path === `"${fileName}"`)
+          (fileRefs[key].path === filePath ||
+            fileRefs[key].path === `"${filePath}"` ||
+            fileRefs[key].name === fileName)
       );
       if (alreadyAdded) return config;
 
-      // 1. Create PBXFileReference
+      // 1. Create PBXFileReference with SOURCE_ROOT relative path
+      //    SOURCE_ROOT = ios/ directory (where .xcodeproj lives)
       const fileRefUuid = xcodeProject.generateUuid();
       objects["PBXFileReference"][fileRefUuid] = {
         isa: "PBXFileReference",
         lastKnownFileType: "text",
-        path: fileName,
-        sourceTree: '"<group>"',
+        name: `"${fileName}"`,
+        path: `"${filePath}"`,
+        sourceTree: "SOURCE_ROOT",
       };
       objects["PBXFileReference"][`${fileRefUuid}_comment`] = fileName;
 
-      // 2. Add to the app's PBXGroup
+      // 2. Add to the main PBXGroup (project root level)
       const mainGroupKey =
         xcodeProject.getFirstProject().firstProject.mainGroup;
       const mainGroup = xcodeProject.getPBXGroupByKey(mainGroupKey);
-      let appGroupKey = mainGroupKey;
       if (mainGroup && mainGroup.children) {
-        for (const child of mainGroup.children) {
-          if (child.comment === projectName) {
-            appGroupKey = child.value;
-            break;
-          }
-        }
-      }
-      const appGroup = xcodeProject.getPBXGroupByKey(appGroupKey);
-      if (appGroup && appGroup.children) {
-        appGroup.children.push({ value: fileRefUuid, comment: fileName });
+        mainGroup.children.push({ value: fileRefUuid, comment: fileName });
       }
 
       // 3. Create PBXBuildFile
