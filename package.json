@@ -1,6 +1,6 @@
 {
   "name": "rn-passport-reader",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "React Native Expo module for reading NFC-enabled passports and ID cards using BAC (Basic Access Control)",
   "main": "build/index.js",
   "types": "build/index.d.ts",
