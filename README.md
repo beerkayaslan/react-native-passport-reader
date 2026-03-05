@@ -136,6 +136,43 @@ try {
 }
 ```
 
+### Progress Tracking
+
+Listen to real-time progress events during NFC reading:
+
+```typescript
+import { addPassportReadProgressListener } from "rn-passport-reader";
+import { useState, useEffect } from "react";
+
+function NFCReadScreen() {
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const subscription = addPassportReadProgressListener((event) => {
+      setProgress(event.progress);  // 0-100
+      setMessage(event.message);    // "Reading face photo..." etc.
+    });
+    return () => subscription.remove();
+  }, []);
+
+  return (
+    <View>
+      <Text>{progress}% — {message}</Text>
+    </View>
+  );
+}
+```
+
+#### Progress Event
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `progress` | `number` | Overall progress percentage (0–100) |
+| `step` | `number` | Current step index |
+| `totalSteps` | `number` | Total number of steps (8) |
+| `message` | `string` | Human-readable status message |
+
 ## API
 
 ### `readPassport(serialNumber, dateOfBirth, dateOfExpiry)`
@@ -153,6 +190,10 @@ Returns `Promise<PassportData>`.
 ### `isNFCSupported()`
 
 Returns `boolean` indicating whether NFC is available and enabled on the device.
+
+### `addPassportReadProgressListener(listener)`
+
+Subscribes to real-time progress events during NFC passport reading. Returns an `EventSubscription` — call `.remove()` to unsubscribe.
 
 ### `PassportData`
 
